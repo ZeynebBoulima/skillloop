@@ -1,0 +1,15 @@
+services:
+  assessment-db:
+    image: postgres:16
+    container_name: assessment-db
+    environment:
+      POSTGRES_DB: assessment_db
+      POSTGRES_USER: assessment
+      POSTGRES_PASSWORD: assessment
+    ports:
+      - "5433:5432"
+    volumes:
+      - assessment-data:/var/lib/postgresql/data
+
+volumes:
+  assessment-data:

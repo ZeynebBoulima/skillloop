@@ -1,0 +1,15 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: assessment-service
+  datasource:
+    url: jdbc:postgresql://localhost:5433/assessment_db
+    username: assessment
+    password: assessment
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    show-sql: true
