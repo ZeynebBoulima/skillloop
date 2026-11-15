@@ -1,0 +1,27 @@
+services:
+  identity-db:
+    image: postgres:16
+    container_name: identity-db
+    environment:
+      POSTGRES_DB: identity_db
+      POSTGRES_USER: identity
+      POSTGRES_PASSWORD: identity
+    ports:
+      - "5432:5432"
+    volumes:
+      - identity-data:/var/lib/postgresql/data
+
+  identity-service:
+    build: .
+    container_name: identity-service
+    depends_on:
+      - identity-db
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://identity-db:5432/identity_db
+      APP_JWT_SECRET: change-me-to-a-long-random-secret-of-32-chars-minimum
+      APP_JWT_ACCESS_EXPIRATION_MINUTES: 15
+      APP_JWT_REFRESH_EXPIRATION_DAYS: 7
+volumes:
+  identity-data:
