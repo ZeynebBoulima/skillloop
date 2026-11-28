@@ -71,4 +71,27 @@ public class AssessmentController {
     public void deleteQuestion(@PathVariable UUID id, @PathVariable UUID questionId) {
         service.deleteQuestion(id, questionId);
     }
+    @PostMapping("/{id}/questions/{questionId}/options")
+    @ResponseStatus(HttpStatus.CREATED)
+    public OptionResponse addOption(@PathVariable UUID id,
+                                    @PathVariable UUID questionId,
+                                    @Valid @RequestBody OptionRequest request) {
+        return service.addOption(id, questionId, request);
+    }
+
+    @PutMapping("/{id}/questions/{questionId}/options/{optionId}")
+    public OptionResponse updateOption(@PathVariable UUID id,
+                                       @PathVariable UUID questionId,
+                                       @PathVariable UUID optionId,
+                                       @Valid @RequestBody OptionRequest request) {
+        return service.updateOption(id, questionId, optionId, request);
+    }
+
+    @DeleteMapping("/{id}/questions/{questionId}/options/{optionId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteOption(@PathVariable UUID id,
+                             @PathVariable UUID questionId,
+                             @PathVariable UUID optionId) {
+        service.deleteOption(id, questionId, optionId);
+    }
 }

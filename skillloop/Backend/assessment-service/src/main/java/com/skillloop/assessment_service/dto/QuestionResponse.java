@@ -3,6 +3,7 @@ package com.skillloop.assessment_service.dto;
 import com.skillloop.assessment_service.entity.Difficulty;
 import com.skillloop.assessment_service.entity.QuestionType;
 
+import java.util.List;
 import java.util.UUID;
 
 public record QuestionResponse(
@@ -11,5 +12,6 @@ public record QuestionResponse(
         QuestionType type,
         Difficulty difficulty,
         int orderIndex,
-        int points
+        int points,
+        List<OptionResponse> options
 ) {}

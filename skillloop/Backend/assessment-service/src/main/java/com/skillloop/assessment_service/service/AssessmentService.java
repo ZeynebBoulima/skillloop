@@ -2,6 +2,7 @@ package com.skillloop.assessment_service.service;
 
 import com.skillloop.assessment_service.dto.*;
 import com.skillloop.assessment_service.entity.*;
+import com.skillloop.assessment_service.repository.AnswerOptionRepository;
 import com.skillloop.assessment_service.repository.AssessmentRepository;
 import com.skillloop.assessment_service.repository.QuestionRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,7 @@ public class AssessmentService {
 
     private final AssessmentRepository assessmentRepository;
     private final QuestionRepository questionRepository;
+    private final AnswerOptionRepository answerOptionRepository;
 
     // ---------- Évaluations ----------
 
@@ -78,6 +80,7 @@ public class AssessmentService {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                     "Impossible de publier une évaluation sans question");
         }
+        assessment.getQuestions().forEach(this::requireReadyToPublish);
         assessment.setStatus(AssessmentStatus.PUBLIE);
         return toResponse(assessment);
     }
@@ -123,6 +126,56 @@ public class AssessmentService {
         assessment.removeQuestion(findQuestion(assessment, questionId));
     }
 
+    // ---------- Choix de réponse ----------
+
+    @Transactional
+    public OptionResponse addOption(UUID assessmentId, UUID questionId, OptionRequest request) {
+        Assessment assessment = find(assessmentId);
+        requireDraft(assessment);
+        Question question = findQuestion(assessment, questionId);
+
+        int max = maxOptions(question);
+        if (question.getOptions().size() >= max) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Nombre maximal de choix atteint (" + max + ")");
+        }
+        checkSingleCorrect(question, request.correct(), null);
+
+        AnswerOption option = AnswerOption.builder()
+                .text(request.text().trim())
+                .correct(request.correct())
+                .position(question.getOptions().size() + 1)
+                .build();
+        question.addOption(option);
+        return toResponse(answerOptionRepository.save(option));
+    }
+
+    @Transactional
+    public OptionResponse updateOption(UUID assessmentId, UUID questionId, UUID optionId, OptionRequest request) {
+        Assessment assessment = find(assessmentId);
+        requireDraft(assessment);
+        Question question = findQuestion(assessment, questionId);
+        AnswerOption option = findOption(question, optionId);
+        checkSingleCorrect(question, request.correct(), optionId);
+
+        option.setText(request.text().trim());
+        option.setCorrect(request.correct());
+        return toResponse(option);
+    }
+
+    @Transactional
+    public void deleteOption(UUID assessmentId, UUID questionId, UUID optionId) {
+        Assessment assessment = find(assessmentId);
+        requireDraft(assessment);
+        Question question = findQuestion(assessment, questionId);
+        question.removeOption(findOption(question, optionId));
+
+        int position = 1;
+        for (AnswerOption o : question.getOptions()) {
+            o.setPosition(position++);
+        }
+    }
+
     // ---------- Outils internes ----------
 
     private Assessment find(UUID id) {
@@ -135,6 +188,13 @@ public class AssessmentService {
                 .filter(q -> q.getId().equals(questionId))
                 .findFirst()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Question introuvable"));
+    }
+
+    private AnswerOption findOption(Question question, UUID optionId) {
+        return question.getOptions().stream()
+                .filter(o -> o.getId().equals(optionId))
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Choix introuvable"));
     }
 
     private void requireDraft(Assessment assessment) {
@@ -153,9 +213,54 @@ public class AssessmentService {
         }
     }
 
+    private int maxOptions(Question question) {
+        return question.getType() == QuestionType.VRAI_FAUX ? 2 : 6;
+    }
+
+    private void checkSingleCorrect(Question question, boolean isCorrect, UUID excludedOptionId) {
+        if (!isCorrect || question.getType() == QuestionType.QCM_MULTIPLE) {
+            return;
+        }
+        boolean alreadyCorrect = question.getOptions().stream()
+                .anyMatch(o -> o.isCorrect() && !o.getId().equals(excludedOptionId));
+        if (alreadyCorrect) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Cette question n'accepte qu'une seule bonne réponse");
+        }
+    }
+
+    private void requireReadyToPublish(Question question) {
+        int n = question.getOrderIndex();
+        long correct = question.getOptions().stream().filter(AnswerOption::isCorrect).count();
+
+        if (question.getOptions().size() < 2) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La question n°" + n + " doit avoir au moins 2 choix");
+        }
+        if (question.getType() == QuestionType.VRAI_FAUX && question.getOptions().size() != 2) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La question n°" + n + " (vrai/faux) doit avoir exactement 2 choix");
+        }
+        if (question.getType() != QuestionType.QCM_MULTIPLE && correct != 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La question n°" + n + " doit avoir exactement une bonne réponse");
+        }
+        if (question.getType() == QuestionType.QCM_MULTIPLE && correct < 1) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "La question n°" + n + " doit avoir au moins une bonne réponse");
+        }
+    }
+
+    // ---------- Conversions vers les DTO ----------
+
+    private OptionResponse toResponse(AnswerOption o) {
+        return new OptionResponse(o.getId(), o.getText(), o.isCorrect(), o.getPosition());
+    }
+
     private QuestionResponse toResponse(Question q) {
         return new QuestionResponse(q.getId(), q.getStatement(), q.getType(),
-                q.getDifficulty(), q.getOrderIndex(), q.getPoints());
+                q.getDifficulty(), q.getOrderIndex(), q.getPoints(),
+                q.getOptions().stream().map(this::toResponse).toList());
     }
 
     private AssessmentResponse toResponse(Assessment a) {
